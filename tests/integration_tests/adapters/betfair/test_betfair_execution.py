@@ -197,6 +197,14 @@ async def _fill_order(
 
 async def _accept_order(order, venue_order_id: VenueOrderId, exec_client, strategy, cache):
     await _submit_order(order, exec_client=exec_client, strategy=strategy, cache=cache)
+    # Generate OrderSubmitted to set the order's account_id (linked to the execution client)
+    exec_client.generate_order_submitted(
+        strategy_id=order.strategy_id,
+        instrument_id=order.instrument_id,
+        client_order_id=order.client_order_id,
+        ts_event=0,
+    )
+    await asyncio.sleep(0)
     exec_client.generate_order_accepted(
         strategy_id=order.strategy_id,
         instrument_id=order.instrument_id,
@@ -537,7 +545,8 @@ async def test_order_stream_new_full_image(exec_client, setup_order_state, cache
     # Act
     exec_client.handle_order_stream_update(raw)
     await asyncio.sleep(0)
-    assert len(events) == 4
+    # Expect 5 events: OrderInitialized, OrderSubmitted, OrderAccepted, OrderFilled, PositionOpened
+    assert len(events) == 5
 
 
 @pytest.mark.asyncio
@@ -569,7 +578,8 @@ async def test_order_stream_update(exec_client, setup_order_state, events):
     await asyncio.sleep(0)
 
     # Assert
-    assert len(events) == 3
+    # Expect 4 events: OrderInitialized, OrderSubmitted, OrderAccepted, OrderUpdated
+    assert len(events) == 4
 
 
 @pytest.mark.asyncio
@@ -585,7 +595,8 @@ async def test_order_stream_filled(exec_client, setup_order_state, events, fill_
     await asyncio.sleep(0)
 
     # Assert
-    assert len(events) == 4
+    # Expect 5 events: OrderInitialized, OrderSubmitted, OrderAccepted, OrderFilled, PositionOpened
+    assert len(events) == 5
     fill: OrderFilled = fill_events[0]
     assert isinstance(fill, OrderFilled)
     assert fill.last_px == betfair_float_to_price(1.10)
@@ -629,7 +640,9 @@ async def test_order_stream_filled_multiple_prices(
     await asyncio.sleep(0)
 
     # Assert
-    assert len(events) == 8
+    # Expect 10 events: 2x (OrderInitialized, OrderSubmitted, OrderAccepted), 2x OrderFilled, PositionOpened, PositionChanged
+    # setup_order_state is called twice, so we get OrderSubmitted for each call
+    assert len(events) == 10
     fill1, fill2 = (event for event in events if isinstance(event, OrderFilled))
     assert isinstance(fill1, OrderFilled)
     assert isinstance(fill2, OrderFilled)
