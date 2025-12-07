@@ -319,8 +319,25 @@ impl Quantity {
 
     #[staticmethod]
     #[pyo3(name = "from_raw")]
-    fn py_from_raw(raw: QuantityRaw, precision: u8) -> Self {
-        Self::from_raw(raw, precision)
+    fn py_from_raw(raw: &Bound<'_, PyAny>, precision: u8) -> PyResult<Self> {
+        // Extract QuantityRaw from Python int
+        // For u128, we need to manually convert from Python int to avoid overflow errors
+        #[cfg(feature = "high-precision")]
+        let raw_value: QuantityRaw = {
+            // Convert Python int to string, then parse as u128
+            let raw_str: String = raw.call_method0("__str__")?.extract()?;
+            raw_str.parse::<u128>().map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Failed to parse raw value as u128: {}",
+                    e
+                ))
+            })?
+        };
+
+        #[cfg(not(feature = "high-precision"))]
+        let raw_value: QuantityRaw = raw.extract()?;
+
+        Ok(Self::from_raw(raw_value, precision))
     }
 
     #[staticmethod]

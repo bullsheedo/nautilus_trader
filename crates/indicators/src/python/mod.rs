@@ -18,6 +18,7 @@
 pub mod average;
 pub mod book;
 pub mod momentum;
+pub mod orderflow;
 pub mod ratio;
 pub mod volatility;
 
@@ -77,5 +78,17 @@ pub fn indicators(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::volatility::kc::KeltnerChannel>()?;
     m.add_class::<crate::volatility::fuzzy::FuzzyCandlesticks>()?;
     m.add_class::<crate::volatility::kp::KeltnerPosition>()?;
+
+    // Orderflow
+    m.add_class::<crate::orderflow::cumulative_delta::CumulativeDelta>()?;
+    m.add_class::<crate::orderflow::vwap_bands::VWAPBands>()?;
+    m.add_class::<crate::orderflow::footprint::FootprintLevel>()?;
+    m.add_class::<crate::orderflow::footprint::FootprintAggregator>()?;
+    m.add_class::<crate::orderflow::initial_balance::InitialBalance>()?;
+    m.add_class::<crate::orderflow::volume_profile::VolumeProfile>()?;
+    m.add_class::<crate::orderflow::stacked_imbalance::ImbalanceType>()?;
+    m.add_class::<crate::orderflow::stacked_imbalance::StackedImbalance>()?;
+    m.add_class::<crate::orderflow::stacked_imbalance::StackedImbalanceDetector>()?;
+
     Ok(())
 }

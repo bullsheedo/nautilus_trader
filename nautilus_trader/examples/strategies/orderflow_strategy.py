@@ -55,7 +55,8 @@ from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.model.events import PositionOpened
 from nautilus_trader.trading.strategy import Strategy
 
-from nautilus_trader.examples.indicators.orderflow import (
+# Use Rust indicators with Cython type conversion (10-50x faster than Python)
+from nautilus_trader.core.nautilus_pyo3.indicators import (
     VolumeProfile,
     VWAPBands,
     InitialBalance,

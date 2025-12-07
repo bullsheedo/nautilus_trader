@@ -18,7 +18,7 @@ import logging
 from datetime import datetime
 
 # Add nautilus_trader to path
-NAUTILUS_PATH = Path("C:/projects/nautilus_trader")
+NAUTILUS_PATH = Path("/root/nautilus_trader")
 sys.path.insert(0, str(NAUTILUS_PATH))
 
 from nautilus_trader.backtest.node import BacktestNode
@@ -34,7 +34,7 @@ from nautilus_trader.model.data import TradeTick
 from nautilus_trader.model.identifiers import TraderId, Venue
 
 # Paths
-CATALOG_PATH = Path("C:/projects/nautilus_trader/catalog")
+CATALOG_PATH = Path("/root/nautilus_trader/catalog_new")
 
 # Instrument ID
 INSTRUMENT_ID = "ETHUSDT-PERP.BINANCE"
@@ -73,18 +73,18 @@ def main():
     print(f"✓ Tick size: {tick_size}")
 
     # Count total ticks for progress tracking
-    logger.info("Counting total ticks in dataset...")
-    print("\n📊 Analyzing dataset...")
-    try:
-        ticks = catalog.trade_ticks(instrument_ids=[str(instrument.id)])
-        total_ticks = len(ticks)
-        logger.info("Total ticks in dataset: %s", f"{total_ticks:,}")
-        print(f"  - Total ticks: {total_ticks:,}")
-        del ticks  # Free memory
-    except Exception as e:
-        logger.warning("Could not count ticks: %s", e)
-        total_ticks = None
-        print(f"  - Could not count ticks (will process all available data)")
+#    logger.info("Counting total ticks in dataset...")
+#    print("\n📊 Analyzing dataset...")
+#    try:
+#        ticks = catalog.trade_ticks(instrument_ids=[str(instrument.id)])
+#        total_ticks = len(ticks)
+#        logger.info("Total ticks in dataset: %s", f"{total_ticks:,}")
+#        print(f"  - Total ticks: {total_ticks:,}")
+#        del ticks  # Free memory
+#    except Exception as e:
+#        logger.warning("Could not count ticks: %s", e)
+#        total_ticks = None
+#        print(f"  - Could not count ticks (will process all available data)")
     
     # Configure venue for Binance USDT-M Futures
     venue_config = BacktestVenueConfig(
@@ -126,7 +126,7 @@ def main():
     # Configure backtest engine with terminal logging only
     engine_config = BacktestEngineConfig(
         trader_id=TraderId("BACKTESTER-001"),
-        logging=LoggingConfig(log_level="INFO"),
+        logging=LoggingConfig(log_level="ERROR"),
         strategies=[strategy_config],
     )
     
@@ -181,7 +181,7 @@ def main():
         except Exception as e:
             print(f"⚠️ Error generating tearsheet: {e}")
 
-        if total_ticks:
+        if False:  # total_ticks disabled
             ticks_per_second = total_ticks / duration.total_seconds()
             print(f"\n⚡ Performance: {ticks_per_second:,.0f} ticks/second")
     else:

@@ -62,6 +62,7 @@ pub mod average;
 pub mod book;
 pub mod indicator;
 pub mod momentum;
+pub mod orderflow;
 pub mod ratio;
 pub mod testing;
 pub mod volatility;
