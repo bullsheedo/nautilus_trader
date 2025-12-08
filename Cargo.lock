@@ -4856,6 +4856,7 @@ dependencies = [
  "nautilus-core",
  "nautilus-data",
  "nautilus-execution",
+ "nautilus-indicators",
  "nautilus-model",
  "nautilus-persistence",
  "nautilus-portfolio",
@@ -5680,6 +5681,7 @@ name = "nautilus-pyo3"
 version = "0.52.0"
 dependencies = [
  "nautilus-analysis",
+ "nautilus-backtest",
  "nautilus-bitmex",
  "nautilus-blockchain",
  "nautilus-bybit",

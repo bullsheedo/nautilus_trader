@@ -30,6 +30,9 @@ pub mod stacked_imbalance;
 pub mod volume_profile;
 pub mod vwap_bands;
 
+// Vectorized versions for ultra-fast backtesting
+pub mod vectorized;
+
 pub use cumulative_delta::CumulativeDelta;
 pub use footprint::{FootprintAggregator, FootprintLevel};
 pub use initial_balance::InitialBalance;

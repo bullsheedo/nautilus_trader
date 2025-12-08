@@ -54,6 +54,7 @@ nautilus-common = { workspace = true }
 nautilus-core = { workspace = true }
 nautilus-data = { workspace = true }
 nautilus-execution = { workspace = true }
+nautilus-indicators = { workspace = true }
 nautilus-model = { workspace = true, features = ["stubs"] }
 nautilus-persistence = { workspace = true }
 nautilus-portfolio = { workspace = true }
