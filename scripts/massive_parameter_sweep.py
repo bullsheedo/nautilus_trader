@@ -17,15 +17,12 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 NAUTILUS_PATH = Path("/root/nautilus_trader")
 sys.path.insert(0, str(NAUTILUS_PATH))
 
-from nautilus_trader.model.identifiers import InstrumentId
+from nautilus_trader.core.nautilus_pyo3.backtest import VectorizedBacktest, BacktestConfig
+from nautilus_trader.model.data import TradeTick
+from nautilus_trader.model.identifiers import InstrumentId, TradeId
 from nautilus_trader.model.objects import Price, Quantity
 from nautilus_trader.model.enums import AggressorSide
-from nautilus_trader.model.data import TradeTick
-from nautilus_trader.model.identifiers import TradeId
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
-
-# Import vectorized backtest
-from nautilus_backtest import BacktestConfig, run_vectorized_backtest
 
 # Configuration
 CSV_FILE = Path("/root/ethusdt_sample.csv")
@@ -84,8 +81,8 @@ def csv_to_trade_ticks(df, instrument_id_str, price_precision, size_precision):
 
 def run_single_config(params):
     """Run backtest for a single parameter configuration."""
-    config_id, poi_tol, tp, sl, prices, timestamps, price_range = params
-    
+    config_id, poi_tol, tp, sl, ticks, price_range = params
+
     try:
         config = BacktestConfig(
             vwap_window=1000,
@@ -103,27 +100,26 @@ def run_single_config(params):
             price_range_min=price_range[0],
             price_range_max=price_range[1],
         )
-        
-        start_time = time.time()
-        result = run_vectorized_backtest(prices, timestamps, config)
-        elapsed = time.time() - start_time
-        
+
+        backtest = VectorizedBacktest(config)
+        result = backtest.run(ticks)
+
         return {
             'config_id': config_id,
             'poi_tolerance': poi_tol,
             'take_profit': tp,
             'stop_loss': sl,
-            'total_trades': result.total_trades,
-            'winning_trades': result.winning_trades,
-            'losing_trades': result.losing_trades,
-            'win_rate': result.win_rate,
-            'total_pnl': result.total_pnl,
-            'avg_win': result.avg_win,
-            'avg_loss': result.avg_loss,
-            'profit_factor': result.profit_factor,
-            'sharpe_ratio': result.sharpe_ratio,
-            'max_drawdown': result.max_drawdown,
-            'elapsed_seconds': elapsed,
+            'total_trades': result.stats.total_trades,
+            'winning_trades': result.stats.winning_trades,
+            'losing_trades': result.stats.losing_trades,
+            'win_rate': result.stats.win_rate,
+            'total_pnl': result.stats.total_pnl,
+            'avg_win': result.stats.avg_win,
+            'avg_loss': result.stats.avg_loss,
+            'profit_factor': result.stats.profit_factor,
+            'sharpe_ratio': result.stats.sharpe_ratio,
+            'max_drawdown': result.stats.max_drawdown,
+            'elapsed_seconds': result.elapsed_seconds,
         }
     except Exception as e:
         return {
@@ -154,30 +150,29 @@ def main():
     
     # Get price range
     prices = [float(tick.price) for tick in ticks]
-    timestamps = [tick.ts_event for tick in ticks]
     price_range = (min(prices), max(prices))
-    
+
     log(f"✓ Loaded {len(ticks):,} ticks")
     log(f"  Price range: ${price_range[0]:.2f} - ${price_range[1]:.2f}")
     log("")
-    
+
     # Generate all parameter combinations
     combinations = list(itertools.product(
         PARAM_GRID['poi_tolerance'],
         PARAM_GRID['take_profit'],
         PARAM_GRID['stop_loss']
     ))
-    
+
     total_configs = len(combinations)
     log(f"📊 Testing {total_configs} parameter combinations")
     log(f"  POI tolerance: {PARAM_GRID['poi_tolerance']}")
     log(f"  Take profit: {PARAM_GRID['take_profit']}")
     log(f"  Stop loss: {PARAM_GRID['stop_loss']}")
     log("")
-    
+
     # Prepare tasks
     tasks = [
-        (i+1, poi, tp, sl, prices, timestamps, price_range)
+        (i+1, poi, tp, sl, ticks, price_range)
         for i, (poi, tp, sl) in enumerate(combinations)
     ]
     
