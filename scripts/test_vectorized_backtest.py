@@ -142,10 +142,33 @@ def main():
     print(f"  Vectorized (Level 4):   {len(ticks)/elapsed:,.0f} ticks/second")
     print(f"  Speedup:                {(len(ticks)/elapsed)/800:.1f}x faster!")
     print()
+
+    # Graceful cleanup
+    print("🔄 Performing cleanup...")
+    del ticks
+    del result
+    del backtest
+    import gc
+    gc.collect()
+    print("  ✓ Memory cleanup complete")
+
+    print()
     print("SUCCESS! 🚀")
     print()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Interrupted by user. Performing cleanup...")
+        import gc
+        gc.collect()
+        print("✓ Cleanup complete")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 

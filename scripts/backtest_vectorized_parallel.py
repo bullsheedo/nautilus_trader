@@ -210,9 +210,34 @@ def main():
 
     print(f"✓ Results saved to {output_file}")
     print()
+
+    # Graceful cleanup
+    print("🔄 Performing cleanup...")
+    import gc
+    gc.collect()  # Force garbage collection to free memory
+    print("  ✓ Memory cleanup complete")
+
+    print()
     print("SUCCESS! 🚀")
+    print()
+    print("Next steps:")
+    print(f"  1. Review results in {output_file}")
+    print(f"  2. Run detailed backtest with tearsheet:")
+    print(f"     python scripts/backtest_detailed_with_tearsheet.py --from-json {output_file}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Interrupted by user. Performing cleanup...")
+        import gc
+        gc.collect()
+        print("✓ Cleanup complete")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
