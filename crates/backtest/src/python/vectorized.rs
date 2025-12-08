@@ -52,6 +52,8 @@ pub struct PyBacktestConfig {
     #[pyo3(get, set)]
     pub trailing_stop_ticks: f64,
     #[pyo3(get, set)]
+    pub warmup_ticks: usize,
+    #[pyo3(get, set)]
     pub price_range_min: f64,
     #[pyo3(get, set)]
     pub price_range_max: f64,
@@ -72,6 +74,7 @@ impl PyBacktestConfig {
         take_profit_ticks=0.30,
         stop_loss_ticks=0.35,
         trailing_stop_ticks=0.20,
+        warmup_ticks=1000,
         price_range_min=0.0,
         price_range_max=10000.0,
     ))]
@@ -88,6 +91,7 @@ impl PyBacktestConfig {
         take_profit_ticks: f64,
         stop_loss_ticks: f64,
         trailing_stop_ticks: f64,
+        warmup_ticks: usize,
         price_range_min: f64,
         price_range_max: f64,
     ) -> Self {
@@ -103,6 +107,7 @@ impl PyBacktestConfig {
             take_profit_ticks,
             stop_loss_ticks,
             trailing_stop_ticks,
+            warmup_ticks,
             price_range_min,
             price_range_max,
         }
@@ -113,7 +118,7 @@ impl PyBacktestConfig {
             "BacktestConfig(vwap_window={}, volume_profile_window={}, footprint_window={}, \
              ib_period_minutes={}, imbalance_min_stack={}, imbalance_ratio={}, \
              poi_tolerance={}, tick_size={}, take_profit_ticks={}, stop_loss_ticks={}, \
-             trailing_stop_ticks={}, price_range=({}, {}))",
+             trailing_stop_ticks={}, warmup_ticks={}, price_range=({}, {}))",
             self.vwap_window,
             self.volume_profile_window,
             self.footprint_window,
@@ -125,6 +130,7 @@ impl PyBacktestConfig {
             self.take_profit_ticks,
             self.stop_loss_ticks,
             self.trailing_stop_ticks,
+            self.warmup_ticks,
             self.price_range_min,
             self.price_range_max,
         )
@@ -145,6 +151,7 @@ impl From<PyBacktestConfig> for BacktestConfig {
             take_profit_ticks: py_config.take_profit_ticks,
             stop_loss_ticks: py_config.stop_loss_ticks,
             trailing_stop_ticks: py_config.trailing_stop_ticks,
+            warmup_ticks: py_config.warmup_ticks,
             price_range: (py_config.price_range_min, py_config.price_range_max),
         }
     }

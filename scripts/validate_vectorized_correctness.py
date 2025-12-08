@@ -15,6 +15,7 @@ import time
 NAUTILUS_PATH = Path("/root/nautilus_trader")
 sys.path.insert(0, str(NAUTILUS_PATH))
 
+from decimal import Decimal
 from nautilus_trader.core.nautilus_pyo3.backtest import VectorizedBacktest, BacktestConfig
 from nautilus_trader.backtest.engine import BacktestEngine, BacktestEngineConfig
 from nautilus_trader.config import LoggingConfig
@@ -80,6 +81,7 @@ def run_vectorized_backtest(ticks, price_range, params):
         take_profit_ticks=params['take_profit'],
         stop_loss_ticks=params['stop_loss'],
         trailing_stop_ticks=0.20,
+        warmup_ticks=1000,  # Match event-driven warmup period
         price_range_min=price_range[0],
         price_range_max=price_range[1],
     )
@@ -121,11 +123,19 @@ def run_eventdriven_backtest(ticks, params):
     engine.add_instrument(instrument)
     
     # Add strategy
+    tick_size = float(instrument.price_increment)
+    instrument_id_obj = InstrumentId.from_str(INSTRUMENT_ID)
     strategy_config = OrderFlowStrategyConfig(
-        instrument_id=INSTRUMENT_ID,
+        instrument_id=instrument_id_obj,
+        tick_size=tick_size,
+        trade_size=Decimal("10.0"),
         poi_tolerance=params['poi_tolerance'],
-        take_profit_ticks=params['take_profit'],
-        stop_loss_ticks=params['stop_loss'],
+        warmup_ticks=1000,
+        tp_pct=params['take_profit'],
+        sl_pct=params['stop_loss'],
+        trailing_activation_pct=0.25,
+        trailing_offset_pct=0.10,
+        use_emulated_orders=True,
     )
     strategy = OrderFlowStrategy(config=strategy_config)
     engine.add_strategy(strategy)

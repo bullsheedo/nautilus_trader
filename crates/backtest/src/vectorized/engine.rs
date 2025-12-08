@@ -33,14 +33,15 @@ pub struct BacktestConfig {
     pub ib_period_minutes: u64,
     pub imbalance_min_stack: usize,
     pub imbalance_ratio: f64,
-    
+
     // Strategy parameters
     pub poi_tolerance: f64,
     pub tick_size: f64,
     pub take_profit_ticks: f64,
     pub stop_loss_ticks: f64,
     pub trailing_stop_ticks: f64,
-    
+    pub warmup_ticks: usize,  // Number of ticks to wait before trading
+
     // Price range for volume profile
     pub price_range: (f64, f64),
 }
@@ -59,6 +60,7 @@ impl Default for BacktestConfig {
             take_profit_ticks: 0.30,
             stop_loss_ticks: 0.35,
             trailing_stop_ticks: 0.20,
+            warmup_ticks: 1000,  // Wait 1000 ticks before trading
             price_range: (0.0, 10000.0),
         }
     }
@@ -95,6 +97,7 @@ impl VectorizedBacktest {
             take_profit_ticks: self.config.take_profit_ticks,
             stop_loss_ticks: self.config.stop_loss_ticks,
             trailing_stop_ticks: self.config.trailing_stop_ticks,
+            warmup_ticks: self.config.warmup_ticks,
         };
 
         let signal_generator = SignalGenerator::new(signal_config);

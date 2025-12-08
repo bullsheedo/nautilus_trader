@@ -42,6 +42,22 @@ pub struct SignalConfig {
     pub take_profit_ticks: f64,
     pub stop_loss_ticks: f64,
     pub trailing_stop_ticks: f64,
+    pub warmup_ticks: usize,  // Number of ticks to wait before trading
+}
+
+/// POI type for prioritization
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum POIType {
+    Resistance = 0,  // Highest priority
+    Support = 1,
+    Neutral = 2,     // Lowest priority
+}
+
+/// POI information
+#[derive(Debug, Clone)]
+struct POIInfo {
+    poi_type: POIType,
+    distance: f64,
 }
 
 #[derive(Debug)]
@@ -62,15 +78,22 @@ impl SignalGenerator {
     ) -> Vec<Signal> {
         let len = prices.len();
         let mut signals = Vec::new();
-        
+
         // Track current position state
         let mut in_position = false;
         let mut position_side = SignalType::None;
         let mut entry_price = 0.0;
-        
+        let mut prev_delta = 0.0;  // Track previous delta for momentum calculation
+
         for i in 0..len {
             let price = prices[i];
-            
+
+            // Skip warmup period - don't trade until indicators are initialized
+            if i < self.config.warmup_ticks {
+                prev_delta = indicators.cumulative_delta[i];
+                continue;
+            }
+
             // Check for exit signals first
             if in_position {
                 let exit_signal = self.check_exit(
@@ -80,19 +103,20 @@ impl SignalGenerator {
                     position_side,
                     indicators,
                 );
-                
+
                 if exit_signal.signal_type != SignalType::None {
                     signals.push(exit_signal);
                     in_position = false;
                     position_side = SignalType::None;
+                    prev_delta = indicators.cumulative_delta[i];
                     continue;
                 }
             }
-            
+
             // Check for entry signals if not in position
             if !in_position {
-                let entry_signal = self.check_entry(i, price, indicators);
-                
+                let entry_signal = self.check_entry(i, price, indicators, prev_delta);
+
                 if entry_signal.signal_type != SignalType::None {
                     signals.push(entry_signal.clone());
                     in_position = true;
@@ -100,17 +124,20 @@ impl SignalGenerator {
                     entry_price = price;
                 }
             }
+
+            // Update previous delta for next iteration
+            prev_delta = indicators.cumulative_delta[i];
         }
-        
+
         signals
     }
     
     /// Check for entry signals at index i
-    fn check_entry(&self, i: usize, price: f64, indicators: &IndicatorArrays) -> Signal {
-        // Get POI context
-        let at_poi = self.is_at_poi(i, price, indicators);
-        
-        if !at_poi {
+    fn check_entry(&self, i: usize, price: f64, indicators: &IndicatorArrays, prev_delta: f64) -> Signal {
+        // Get POI context with prioritization
+        let poi_info = self.get_poi_context(i, price, indicators);
+
+        if poi_info.is_none() {
             return Signal {
                 signal_type: SignalType::None,
                 price,
@@ -119,16 +146,43 @@ impl SignalGenerator {
                 take_profit: None,
             };
         }
-        
-        // Get orderflow bias
-        let bias = self.get_orderflow_bias(i, indicators);
-        
-        let signal_type = match bias {
-            1 => SignalType::Long,
-            -1 => SignalType::Short,
-            _ => SignalType::None,
+
+        let poi = poi_info.unwrap();
+
+        // Get orderflow bias with delta momentum
+        let bias = self.get_orderflow_bias(i, indicators, prev_delta);
+
+        // Determine signal type based on POI type and bias alignment
+        // This matches the event-driven strategy logic (lines 372-394 in orderflow_strategy.py)
+        let signal_type = match poi.poi_type {
+            POIType::Resistance => {
+                // At resistance, only short if bearish
+                // If bullish at resistance, wait for breakout confirmation
+                if bias == -1 {
+                    SignalType::Short
+                } else {
+                    SignalType::None
+                }
+            }
+            POIType::Support => {
+                // At support, only long if bullish
+                // If bearish at support, wait for breakdown confirmation
+                if bias == 1 {
+                    SignalType::Long
+                } else {
+                    SignalType::None
+                }
+            }
+            POIType::Neutral => {
+                // At neutral POI (POC, VWAP), follow bias
+                match bias {
+                    1 => SignalType::Long,
+                    -1 => SignalType::Short,
+                    _ => SignalType::None,
+                }
+            }
         };
-        
+
         if signal_type == SignalType::None {
             return Signal {
                 signal_type: SignalType::None,
@@ -198,41 +252,106 @@ impl SignalGenerator {
         }
     }
 
-    /// Check if price is at a POI
-    fn is_at_poi(&self, i: usize, price: f64, indicators: &IndicatorArrays) -> bool {
+    /// Get POI context with prioritization (matches event-driven strategy)
+    fn get_poi_context(&self, i: usize, price: f64, indicators: &IndicatorArrays) -> Option<POIInfo> {
         let tolerance = self.config.poi_tolerance * self.config.tick_size;
+        let mut pois = Vec::new();
 
-        // Check Volume Profile levels
+        // Volume Profile levels
         if (price - indicators.vp_vah[i]).abs() <= tolerance {
-            return true;
+            pois.push(POIInfo {
+                poi_type: POIType::Resistance,
+                distance: (price - indicators.vp_vah[i]).abs(),
+            });
         }
         if (price - indicators.vp_val[i]).abs() <= tolerance {
-            return true;
+            pois.push(POIInfo {
+                poi_type: POIType::Support,
+                distance: (price - indicators.vp_val[i]).abs(),
+            });
         }
         if (price - indicators.vp_poc[i]).abs() <= tolerance {
-            return true;
+            pois.push(POIInfo {
+                poi_type: POIType::Neutral,
+                distance: (price - indicators.vp_poc[i]).abs(),
+            });
         }
 
-        // Check VWAP levels
+        // VWAP levels (all bands: ±1std, ±2std, ±3std)
         if (price - indicators.vwap[i]).abs() <= tolerance {
-            return true;
+            pois.push(POIInfo {
+                poi_type: POIType::Neutral,
+                distance: (price - indicators.vwap[i]).abs(),
+            });
         }
         if (price - indicators.vwap_upper_1std[i]).abs() <= tolerance {
-            return true;
+            pois.push(POIInfo {
+                poi_type: POIType::Resistance,
+                distance: (price - indicators.vwap_upper_1std[i]).abs(),
+            });
+        }
+        if (price - indicators.vwap_upper_2std[i]).abs() <= tolerance {
+            pois.push(POIInfo {
+                poi_type: POIType::Resistance,
+                distance: (price - indicators.vwap_upper_2std[i]).abs(),
+            });
+        }
+        if (price - indicators.vwap_upper_3std[i]).abs() <= tolerance {
+            pois.push(POIInfo {
+                poi_type: POIType::Resistance,
+                distance: (price - indicators.vwap_upper_3std[i]).abs(),
+            });
         }
         if (price - indicators.vwap_lower_1std[i]).abs() <= tolerance {
-            return true;
+            pois.push(POIInfo {
+                poi_type: POIType::Support,
+                distance: (price - indicators.vwap_lower_1std[i]).abs(),
+            });
+        }
+        if (price - indicators.vwap_lower_2std[i]).abs() <= tolerance {
+            pois.push(POIInfo {
+                poi_type: POIType::Support,
+                distance: (price - indicators.vwap_lower_2std[i]).abs(),
+            });
+        }
+        if (price - indicators.vwap_lower_3std[i]).abs() <= tolerance {
+            pois.push(POIInfo {
+                poi_type: POIType::Support,
+                distance: (price - indicators.vwap_lower_3std[i]).abs(),
+            });
         }
 
-        // Check Initial Balance levels
+        // Initial Balance levels (including IB Mid)
         if (price - indicators.ib_high[i]).abs() <= tolerance {
-            return true;
+            pois.push(POIInfo {
+                poi_type: POIType::Resistance,
+                distance: (price - indicators.ib_high[i]).abs(),
+            });
         }
         if (price - indicators.ib_low[i]).abs() <= tolerance {
-            return true;
+            pois.push(POIInfo {
+                poi_type: POIType::Support,
+                distance: (price - indicators.ib_low[i]).abs(),
+            });
+        }
+        if (price - indicators.ib_mid[i]).abs() <= tolerance {
+            pois.push(POIInfo {
+                poi_type: POIType::Neutral,
+                distance: (price - indicators.ib_mid[i]).abs(),
+            });
         }
 
-        false
+        if pois.is_empty() {
+            return None;
+        }
+
+        // Prioritize: RESISTANCE/SUPPORT first, then by proximity
+        pois.sort_by(|a, b| {
+            a.poi_type.cmp(&b.poi_type)
+                .then_with(|| a.distance.partial_cmp(&b.distance).unwrap())
+        });
+
+        Some(pois[0].clone())
     }
 
     /// Check if price has moved away from POI
@@ -246,20 +365,26 @@ impl SignalGenerator {
 
         let near_vwap = (price - indicators.vwap[i]).abs() <= tolerance
             || (price - indicators.vwap_upper_1std[i]).abs() <= tolerance
-            || (price - indicators.vwap_lower_1std[i]).abs() <= tolerance;
+            || (price - indicators.vwap_upper_2std[i]).abs() <= tolerance
+            || (price - indicators.vwap_upper_3std[i]).abs() <= tolerance
+            || (price - indicators.vwap_lower_1std[i]).abs() <= tolerance
+            || (price - indicators.vwap_lower_2std[i]).abs() <= tolerance
+            || (price - indicators.vwap_lower_3std[i]).abs() <= tolerance;
 
         let near_ib = (price - indicators.ib_high[i]).abs() <= tolerance
-            || (price - indicators.ib_low[i]).abs() <= tolerance;
+            || (price - indicators.ib_low[i]).abs() <= tolerance
+            || (price - indicators.ib_mid[i]).abs() <= tolerance;
 
         !near_vp && !near_vwap && !near_ib
     }
 
     /// Get orderflow bias (-1 = bearish, 0 = neutral, 1 = bullish)
-    fn get_orderflow_bias(&self, i: usize, indicators: &IndicatorArrays) -> i8 {
+    /// Matches event-driven strategy logic including delta momentum
+    fn get_orderflow_bias(&self, i: usize, indicators: &IndicatorArrays, prev_delta: f64) -> i8 {
         let mut bullish_signals = 0;
         let mut bearish_signals = 0;
 
-        // Cumulative Delta
+        // 1. Cumulative Delta direction
         let delta = indicators.cumulative_delta[i];
         if delta > 50.0 {
             bullish_signals += 1;
@@ -267,7 +392,25 @@ impl SignalGenerator {
             bearish_signals += 1;
         }
 
-        // Stacked Imbalances
+        // 2. Delta momentum (is it accelerating or exhausting?)
+        let delta_change = delta - prev_delta;
+
+        if delta > 0.0 && delta_change < -20.0 {
+            // Positive but declining = exhaustion
+            bearish_signals += 1;
+        } else if delta < 0.0 && delta_change > 20.0 {
+            // Negative but rising = recovery
+            bullish_signals += 1;
+        } else if delta_change.abs() > 30.0 {
+            // Strong momentum
+            if delta_change > 0.0 {
+                bullish_signals += 1;
+            } else {
+                bearish_signals += 1;
+            }
+        }
+
+        // 3. Stacked Imbalances (strong institutional signal)
         if indicators.has_bullish_imbalance[i] {
             bullish_signals += 2;
         }
@@ -275,7 +418,7 @@ impl SignalGenerator {
             bearish_signals += 2;
         }
 
-        // Footprint Delta
+        // 4. Footprint Delta at current price level
         let footprint_delta = indicators.footprint_delta[i];
         if footprint_delta > 100.0 {
             bullish_signals += 1;
@@ -283,6 +426,7 @@ impl SignalGenerator {
             bearish_signals += 1;
         }
 
+        // Determine bias
         if bullish_signals > bearish_signals {
             1
         } else if bearish_signals > bullish_signals {
