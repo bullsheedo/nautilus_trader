@@ -26,6 +26,9 @@ pub mod signals;
 pub mod positions;
 pub mod statistics;
 
+#[cfg(test)]
+mod tests;
+
 pub use engine::{VectorizedBacktest, BacktestConfig, BacktestResult};
 pub use signals::{SignalGenerator, Signal, SignalType};
 pub use positions::{PositionTracker, Position, PositionSide};
